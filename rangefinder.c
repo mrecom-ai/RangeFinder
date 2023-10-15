@@ -7,6 +7,7 @@
 #include <libbase58.h>
 #include <time.h>
 #include <pthread.h>
+#include <unistd.h> 
 
 #define PRIVATE_KEY_SIZE 32
 
@@ -170,14 +171,9 @@ int main(int argc, char *argv[]) {
     hex_to_256bit(start_hex, start_val);
     hex_to_256bit(end_hex, end_val);
 
-    secp256k1_context *ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN);
-    if (!ctx) {
-        printf("Failed to create secp256k1 context.\n");
-        return 1;
-    }
-
     // Define the number of threads
-    int num_threads = 4;  // Adjust as needed
+    int num_threads = sysconf(_SC_NPROCESSORS_ONLN) - 1; //uses all CPUs -1
+
     pthread_t threads[num_threads];
     ThreadData thread_data[num_threads];
 
@@ -185,10 +181,16 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < num_threads; i++) {
         memcpy(thread_data[i].start_val, start_val, 32);
 
+        // Create a separate context for each thread
+        thread_data[i].ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN);
+        if (!thread_data[i].ctx) {
+            printf("Failed to create secp256k1 context for thread %d.\n", i);
+            return 1;
+        }
+
         // Calculate the end value for this thread
         unsigned char total_range[32];
         subtract_256bit(end_val, start_val, total_range);
-        thread_data[i].ctx = ctx;  // Set the context for this thread
         thread_data[i].target_address = target_address;  // Set the target address for this thread
 
         unsigned char sub_range[32] = {0};
@@ -210,7 +212,7 @@ int main(int argc, char *argv[]) {
         memcpy(start_val, end_for_this_thread, 32);
     }
 
-    // Create the threads
+     // Create the threads
     for (int i = 0; i < num_threads; i++) {
         pthread_create(&threads[i], NULL, thread_search, &thread_data[i]);
     }
@@ -218,10 +220,9 @@ int main(int argc, char *argv[]) {
     // Wait for all threads to finish
     for (int i = 0; i < num_threads; i++) {
         pthread_join(threads[i], NULL);
+        // Destroy the context for each thread after it's done
+        secp256k1_context_destroy(thread_data[i].ctx);
     }
-
-    secp256k1_context_destroy(ctx);
 
     return 0;
 }
-
