@@ -13,15 +13,55 @@ def read_results(file_path):
     except FileNotFoundError:
         return None  # If the file does not exist, no results to report
 
-def report_results_to_server(connection, results):
+def connect_to_server():
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.connect((SERVER_HOST, SERVER_PORT))
+    return client_socket
+
+def get_btc_address(client_socket):
+    # Identify as a GPU client
+    client_socket.sendall(b'GPU\n')
+    print("Sent GPU identification to server")
+    
+    # Handle the welcome message
+    welcome_message = client_socket.recv(1024).decode().strip()
+    print(f"Received welcome message: {welcome_message}")
+    
+    # Now, expect to receive the BTC address
+    btc_address_message = client_socket.recv(1024).decode().strip()
+    print(f"Received BTC address message: {btc_address_message}")
+    
+    btc_address = btc_address_message.split(':')[1].strip()  # Extract the BTC address from the server response
+    return btc_address
+
+def request_range(client_socket):
+    print("Sent range request to server")
+    client_socket.sendall(b"Requesting range\n")
+    
+    # Receive the next range assignment from the server
+    next_range_message = client_socket.recv(1024).decode().strip()
+    print(f"Received range assignment: {next_range_message}")
+    
+    return next_range_message
+
+
+def report_results(client_socket, range_str, results):
+    
+    # Identify itself as a GPU client again
+    client_socket.sendall(b'GPU\n')
+    print("Sent GPU identification to server again")
+    
     if results:
-        message = f'Range Completed with results: {results}\n'
+        message = f'Range Completed: {range_str}:{results}\n'
     else:
-        message = 'Range completed no results\n'
-    connection.sendall(message.encode())
+        message = f'Range Completed no results: {range_str}\n'
+    
+    # Send the results to the server
+    client_socket.sendall(message.encode())
+    print(f"Sent results to server: {message}")
+
 
 def run_gpu_program(range_str, btc_address):
-    print(f"Received range string: {range_str}")  # Debug print statement
     start_range, end_range = range_str.split(':')
     cmd = [
         GPU_PROGRAM_PATH,
@@ -34,54 +74,31 @@ def run_gpu_program(range_str, btc_address):
         btc_address,
         '-o', 'found.txt'
     ]
-    print(f"Running GPU program with command: {' '.join(cmd)}")  # Debug print statement
     subprocess.run(cmd)  # Run the GPU program with the provided command
 
-
-def gpu_client():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-        # Connect to the server
-        client_socket.connect((SERVER_HOST, SERVER_PORT))
-
-        # Identify itself as a GPU client
-        client_socket.sendall(b'GPU\n')
-
-        # Handle the welcome message
-        welcome_message = client_socket.recv(1024).decode().strip()
-        print(welcome_message)  # Or handle as needed
-
-        # Receive BTC Address from the server
-        btc_address_message = client_socket.recv(1024).decode().strip()
-        btc_address = btc_address_message.split(':')[1].strip()  # Extract the BTC address from the server response
-        print(f"Received BTC address: {btc_address}")
-
-        # Infinite loop to continuously ask for ranges and process them
-        while True:
-            # Ask for a new range to hunt
-            client_socket.sendall(b"Requesting range\n")
-            next_range_message = client_socket.recv(1024).decode().strip()
-            print(f"Received range: {next_range_message}")
-            if "Assigned GPU range" in next_range_message:
-                print(f"Full message received for range assignment: {next_range_message}")
-                _, range_str = next_range_message.split(':', 1)
-                range_str = range_str.strip()
-                print(f"Extracted range string: {range_str}")  # This should print the full range
-
-
-                # Run the GPU program
-                run_gpu_program(range_str, btc_address)
-
-                # Read results from found.txt
-                results = read_results('found.txt')
-
-                # Report results to server
-                report_results_to_server(client_socket, results)
-
-                # Clean up found.txt for the next iteration
-                open('found.txt', 'w').close()
-            else:
-                print(f"Unexpected message: {next_range_message}")
+def clean_up():
+    open('found.txt', 'w').close()  # Clean up found.txt for the next iteration
 
 if __name__ == '__main__':
-    gpu_client()
+    try:
+        with connect_to_server() as client_socket:
+            btc_address = get_btc_address(client_socket)
+            # Now we keep the socket open and use the same connection to request ranges and send results
+            while True:
+                try:
+                    next_range_message = request_range(client_socket)
+                    if "Assigned GPU range" in next_range_message:
+                        _, range_str = next_range_message.split(':', 1)
+                        range_str = range_str.strip()
+                        run_gpu_program(range_str, btc_address)
+                        results = read_results('found.txt')
+                        report_results(client_socket, range_str, results)
+                        clean_up()
+                    else:
+                        time.sleep(RETRY_INTERVAL)  # Wait before retrying if no range was assigned
+                except Exception as e:
+                    print(f"An error occurred during range request or processing: {e}")
+                    time.sleep(RETRY_INTERVAL)  # Wait before retrying if an error occurred
+    except Exception as e:
+        print(f"An error occurred during initial connection or BTC address retrieval: {e}")
 
