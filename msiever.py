@@ -40,7 +40,7 @@ def load_scanned_numbers():
     print("Loading scanned numbers from file...")
     if os.path.exists('scanned.txt'):
         with open('scanned.txt', 'r') as file:
-            scanned = set(hex_to_number(line) for line in file.read().splitlines())
+            scanned = set(line.strip() for line in file)
             print(f"Loaded {len(scanned)} numbers.")
             return scanned
     print("No scanned numbers file found.")
