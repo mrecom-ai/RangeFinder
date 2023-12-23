@@ -20,7 +20,7 @@ def generate_sub_range(overall_range):
     start, end = overall_range
     random_start = random.randint(start, end - 10000)
     print(f"Generated subrange: {random_start} to {random_start + 10000}")
-    time.sleep(0.5)  # Add a small delay for monitoring
+    time.sleep(2)  # Add a small delay for monitoring
     return (random_start, random_start + 10000)
 
 def run_msieve(number):
