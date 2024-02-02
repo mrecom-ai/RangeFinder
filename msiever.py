@@ -16,21 +16,37 @@ def hex_to_number(hex_string):
     return int(hex_string, 16)
 
 def generate_sub_range(overall_range):
-    """Generate a random subrange within the overall range."""
+    """Generate the next number in the overall range, starting from the end and working backwards."""
+    global current_end  # Global variable to keep track of the current end of the range
+
     start, end = overall_range
-    random_start = random.randint(start, end - 10000)
-    print(f"Generated subrange: {random_start} to {random_start + 10000}")
-    time.sleep(2)  # Add a small delay for monitoring
-    return (random_start, random_start + 10000)
+
+    # Initialize current_end at the first call
+    if 'current_end' not in globals():
+        current_end = end
+
+    # If the current end is less than the start, the range is exhausted
+    if current_end < start:
+        print("Range is exhausted.")
+        return None
+
+    #print(f"Processing number: {current_end}")
+    time.sleep(0.05)  # Add a small delay for monitoring
+
+    # Decrement current_end for the next call
+    current_end -= 1
+
+    return current_end
+
 
 def run_msieve(number):
-    #print(f"Running msieve on number: {number}")
+    print(f"Running msieve on number: {number}")
     try:
         result = subprocess.run(
-            ['MATH/msieve/msieve', '-q', '-v', '-e', str(number)], 
+            ['/CPU-Primes/MATH/msieve/msieve', '-q', '-v', '-e', str(number)], 
             check=True, capture_output=True, text=True
         )
-        time.sleep(.2)  # Add a delay for monitoring
+        time.sleep(.05)  # Add a delay for monitoring
         return result.stdout
     except subprocess.CalledProcessError as e:
         print(f"Error running msieve for number {number}: {e}")
@@ -45,6 +61,7 @@ def load_scanned_numbers():
             return scanned
     print("No scanned numbers file found.")
     return set()
+
 
 
 def write_to_file(filename, number, digit_length=None, mode='mo'):
@@ -89,7 +106,7 @@ def process_msieve_output(output, hex_range):
             if mode == 'mo':
                 write_to_file('GPU.txt' if digit_length <= 13 else 'BF.txt', prime, digit_length, mode)
             elif mode == 'bf':
-                if digit_length <= 13:
+                if digit_length <= 13: #Edit here for processing digits with bf mode
                     write_to_file('GPU.txt', prime, digit_length, mode)
                 else:
                     run_prime_cpu_printer(prime, hex_range)
@@ -101,7 +118,7 @@ def run_prime_cpu_printer(prime, hex_range):
         # Construct the command for prime-CPU-printer
         prime_cpu_printer_command = [
             "python3",
-            "prime-CPU-printer.py",
+            "/CPU-Primes/prime-CPU-printer.py",
             "-r", hex_range,
             "-p", str(prime),
             "-w", "1"
@@ -112,9 +129,9 @@ def run_prime_cpu_printer(prime, hex_range):
 
         # Construct the command for brainflayer
         brainflayer_command = [
-            "brainflayer/brainflayer",
+            "/CPU-Primes/brainflayer/brainflayer",
             "-v", "-t", "priv", "-x", "-a",
-            "-b", "brainflayer/puzzle-addresses.blf",
+            "-b", "/CPU-Primes/brainflayer/puzzle-addresses.blf",
             "-o", "found.txt"
         ]
 
@@ -197,13 +214,15 @@ def main():
     scanned_numbers = load_scanned_numbers()
 
     while True:
-        sub_range = generate_sub_range(overall_range)
-        print("Processing new subrange")
+        current_number = generate_sub_range(overall_range)
+        if current_number is None:
+            print("Completed processing the entire range.")
+            break
 
-        for number in range(sub_range[0], sub_range[1]):
-            process_number(number)
+        #print(f"Processing number: {current_number}")
+        process_number(current_number)
 
-        print("Subrange processing complete")
+        #print("Number processing complete")
 
 if __name__ == "__main__":
     main()
