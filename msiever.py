@@ -31,7 +31,7 @@ def generate_sub_range(overall_range):
         return None
 
     #print(f"Processing number: {current_end}")
-    time.sleep(0.05)  # Add a small delay for monitoring
+    time.sleep(0.15)  # Add a small delay for monitoring
 
     # Decrement current_end for the next call
     current_end -= 1
