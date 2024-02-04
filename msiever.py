@@ -40,7 +40,7 @@ def generate_sub_range(overall_range):
 
 
 def run_msieve(number):
-    print(f"Running msieve on number: {number}")
+    #print(f"Running msieve on number: {number}")
     try:
         result = subprocess.run(
             ['/CPU-Primes/MATH/msieve/msieve', '-q', '-v', '-e', str(number)], 
